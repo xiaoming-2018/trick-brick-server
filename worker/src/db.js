@@ -3,13 +3,13 @@
 
 // 默认过关时长，仅 stats 在配置缺失时回退使用（与 schema.sql 的 seed 保持一致）。
 export const DEFAULT_LEVELS = [
-  { index: 0, time: 8,  name: '❤ 爱心(新手引导)' },
-  { index: 1, time: 34, name: '🟧 回字方块' },
-  { index: 2, time: 30, name: '🐸 青蛙 · 认识黑砖' },
-  { index: 3, time: 22, name: '🌱 带茎花 · 认识绿砖' },
-  { index: 4, time: 25, name: '🧩 拼图' },
-  { index: 5, time: 51, name: '🟩 方块' },
-  { index: 6, time: 55, name: '🔥 能量反应堆 · 综合挑战' },
+  { index: 0, time: 8,  name: '第一关 · 填充' },
+  { index: 1, time: 34, name: '第二关 · 毁灭' },
+  { index: 2, time: 30, name: '第三关 · 生长' },
+  { index: 3, time: 22, name: '第四关 · 协调' },
+  { index: 4, time: 25, name: '第五关 · 距离' },
+  { index: 5, time: 51, name: '第六关 · 抵抗' },
+  { index: 6, time: 55, name: '第七关 · 保护' },
 ];
 
 // 公开 API：关卡时长配置
