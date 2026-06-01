@@ -12,7 +12,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "trick-brick"
-database_id = "PLACEHOLDER_RUN_wrangler_d1_create"
+database_id = "0a2a7336-df5d-4f3a-9923-3400a5d81fed"
 
 # 埋点接口限流（Cloudflare 原生 Rate Limiting，免费、无需写 D1）。
 # period 仅支持 10 或 60 秒；这里 60s 内每个 IP 哈希最多 240 次，对齐原内存限流。
