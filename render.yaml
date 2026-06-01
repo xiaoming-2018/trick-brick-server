@@ -5,6 +5,7 @@ services:
     name: trick-brick-server
     runtime: node
     plan: free
+    region: singapore
     buildCommand: npm install
     startCommand: node src/app.js
     healthCheckPath: /api/levels/config
@@ -17,9 +18,9 @@ services:
         generateValue: true
       - key: IP_SALT
         generateValue: true
-      # 允许前端(GitHub Pages)跨域访问
+      # 允许跨域来源：* 表示任意来源（埋点/配置为公开接口、不带 cookie，放开安全）
       - key: CORS_ORIGIN
-        value: https://wyuegood-afk.github.io
+        value: "*"
       # 后端不再托管游戏前端(前端在 Pages),留空即可
       - key: GAME_DIR
         value: ""

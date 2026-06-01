@@ -15,17 +15,25 @@ const PORT = Number(process.env.PORT) || 3000;
 const GAME_DIR = process.env.GAME_DIR
   ? resolve(__dirname, '..', process.env.GAME_DIR)
   : null;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '';
+// 允许跨域的来源：逗号分隔可填多个；填 * 允许任意来源（埋点/配置为公开接口，可放开）。
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const CORS_ALLOW_ALL = CORS_ORIGINS.includes('*');
 
 const app = express();
 app.set('trust proxy', true); // 云上经 Nginx/Caddy 反代，取 X-Forwarded-For 真实 IP
 app.use(express.json({ limit: '32kb' })); // 埋点请求体小，限制大小防滥用
 
 // ---------- CORS（游戏与后端跨域时启用）----------
+// 支持多来源白名单：回显命中的 Origin 并加 Vary，未命中则不发 CORS 头。
 app.use((req, res, next) => {
-  if (CORS_ORIGIN) {
-    res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  const origin = req.get('origin');
+  if (origin && (CORS_ALLOW_ALL || CORS_ORIGINS.includes(origin))) {
+    res.setHeader('Access-Control-Allow-Origin', CORS_ALLOW_ALL ? '*' : origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
