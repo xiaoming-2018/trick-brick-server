@@ -161,6 +161,7 @@
     // 概览
     var ov = $('overview');
     ov.innerHTML =
+      box(s.overview.unique_visitors, '独立访客(按IP去重)') +
       box(s.overview.total_runs, '总游玩次数') +
       box(s.overview.cleared_runs, '通关全部') +
       box(s.overview.total_attempts, '关卡尝试总数');

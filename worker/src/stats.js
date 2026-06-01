@@ -80,10 +80,12 @@ export async function computeStats(DB, range = {}) {
 
   // 漏斗:到达人数(run.max_level_reached >= level) 与 通过人数(该关有 win 的 run)
   const { results: reachedRows } = await DB.prepare(`
-    SELECT max_level_reached FROM run ${rClause}
+    SELECT max_level_reached, ip_hash FROM run ${rClause}
   `).bind(...rP).all();
 
   const totalRuns = reachedRows.length;
+  // 独立访客:按 ip_hash 去重(近似 UV;同网络多人会偏少、跨网络同人会偏多)
+  const uniqueVisitors = new Set(reachedRows.map((x) => x.ip_hash).filter(Boolean)).size;
   const clearedRow = await DB.prepare(`
     SELECT COUNT(*) c FROM run ${rClause ? rClause + ' AND' : 'WHERE'} ended_reason='cleared'
   `).bind(...rP).first();
@@ -124,6 +126,7 @@ export async function computeStats(DB, range = {}) {
   return {
     range: { from: from || null, to: to || null },
     overview: {
+      unique_visitors: uniqueVisitors,
       total_runs: totalRuns,
       cleared_runs: clearedRuns,
       total_attempts: rows.reduce((s, r) => s + (r.attempts_total || 0), 0),
