@@ -1,9 +1,10 @@
-// 难度分析聚合:从 run / level_attempt 计算每关指标、漏斗与调参建议
-import { db, DEFAULT_LEVELS } from './db.js';
+// 难度分析聚合:从 run / level_attempt 计算每关指标、漏斗与调参建议(Postgres,异步)。
+// 注意:pg 默认把 COUNT/SUM 的 bigint、numeric 当字符串返回,故 SQL 里统一 ::int / ::float8 转型。
+import { pool, DEFAULT_LEVELS } from './db.js';
 
 // 关卡名(优先用配置表里的 name,回退默认)
-function levelNames() {
-  const rows = db.prepare('SELECT level_index, name, time_seconds FROM level_config ORDER BY level_index').all();
+async function levelNames() {
+  const { rows } = await pool.query('SELECT level_index, name, time_seconds FROM level_config ORDER BY level_index');
   const map = {};
   rows.forEach((r) => { map[r.level_index] = { name: r.name, time: r.time_seconds }; });
   DEFAULT_LEVELS.forEach((l) => { if (!map[l.index]) map[l.index] = { name: l.name, time: l.time }; });
@@ -39,51 +40,52 @@ function suggestion(m) {
   return { level: 'ok', text: '难度与时长大致合理' };
 }
 
-export function computeStats(range = {}) {
+export async function computeStats(range = {}) {
   const { from, to } = range;
-  // 构造时间范围过滤(作用于 level_attempt.ended_at / run.started_at)
-  const aWhere = [], aP = {};
-  if (from) { aWhere.push('ended_at >= @from'); aP.from = from; }
-  if (to) { aWhere.push('ended_at <= @to'); aP.to = to; }
+  // 时间范围过滤(作用于 level_attempt.ended_at / run.started_at),位置参数 $n 按入数组顺序
+  const aWhere = [], aP = [];
+  if (from) { aP.push(from); aWhere.push(`ended_at >= $${aP.length}`); }
+  if (to) { aP.push(to); aWhere.push(`ended_at <= $${aP.length}`); }
   const aClause = aWhere.length ? 'WHERE ' + aWhere.join(' AND ') : '';
 
-  const rWhere = [], rP = {};
-  if (from) { rWhere.push('started_at >= @from'); rP.from = from; }
-  if (to) { rWhere.push('started_at <= @to'); rP.to = to; }
+  const rWhere = [], rP = [];
+  if (from) { rP.push(from); rWhere.push(`started_at >= $${rP.length}`); }
+  if (to) { rP.push(to); rWhere.push(`started_at <= $${rP.length}`); }
   const rClause = rWhere.length ? 'WHERE ' + rWhere.join(' AND ') : '';
 
-  const names = levelNames();
+  const names = await levelNames();
 
   // 每关聚合
-  const rows = db.prepare(`
+  const { rows } = await pool.query(`
     SELECT level_index,
-      COUNT(*)                                                          AS attempts_total,
-      SUM(CASE WHEN outcome='win'  THEN 1 ELSE 0 END)                   AS wins,
-      SUM(CASE WHEN outcome='lose' THEN 1 ELSE 0 END)                   AS loses,
-      COUNT(DISTINCT run_id)                                            AS runs_attempted,
-      COUNT(DISTINCT CASE WHEN outcome='win' THEN run_id END)           AS runs_won,
-      SUM(CASE WHEN attempt_no=1 THEN 1 ELSE 0 END)                     AS first_attempts,
-      SUM(CASE WHEN attempt_no=1 AND outcome='win' THEN 1 ELSE 0 END)   AS first_wins,
-      AVG(CASE WHEN outcome='win'  THEN duration_ms END)                AS avg_win_duration,
+      COUNT(*)::int                                                       AS attempts_total,
+      SUM(CASE WHEN outcome='win'  THEN 1 ELSE 0 END)::int                AS wins,
+      SUM(CASE WHEN outcome='lose' THEN 1 ELSE 0 END)::int                AS loses,
+      COUNT(DISTINCT run_id)::int                                         AS runs_attempted,
+      COUNT(DISTINCT CASE WHEN outcome='win' THEN run_id END)::int        AS runs_won,
+      SUM(CASE WHEN attempt_no=1 THEN 1 ELSE 0 END)::int                  AS first_attempts,
+      SUM(CASE WHEN attempt_no=1 AND outcome='win' THEN 1 ELSE 0 END)::int AS first_wins,
+      AVG(CASE WHEN outcome='win'  THEN duration_ms END)::float8          AS avg_win_duration,
       AVG(CASE WHEN outcome='win' AND allotted_time>0
-               THEN 1.0*time_left_ms/(allotted_time*1000.0) END)        AS avg_time_left_ratio,
-      AVG(CASE WHEN outcome='lose' THEN completion_pct END)             AS avg_fail_completion
+               THEN 1.0*time_left_ms/(allotted_time*1000.0) END)::float8  AS avg_time_left_ratio,
+      AVG(CASE WHEN outcome='lose' THEN completion_pct END)::float8       AS avg_fail_completion
     FROM level_attempt
     ${aClause}
     GROUP BY level_index
-  `).all(aP);
+  `, aP);
   const byLevel = {};
   rows.forEach((r) => { byLevel[r.level_index] = r; });
 
   // 漏斗:到达人数(run.max_level_reached >= level) 与 通过人数(该关有 win 的 run)
-  const reachedRows = db.prepare(`
+  const { rows: reachedRows } = await pool.query(`
     SELECT max_level_reached FROM run ${rClause}
-  `).all(rP);
+  `, rP);
 
   const totalRuns = reachedRows.length;
-  const clearedRuns = db.prepare(`
-    SELECT COUNT(*) c FROM run ${rClause ? rClause + " AND" : "WHERE"} ended_reason='cleared'
-  `).get(rP).c;
+  const { rows: clearedRows } = await pool.query(`
+    SELECT COUNT(*)::int AS c FROM run ${rClause ? rClause + ' AND' : 'WHERE'} ended_reason='cleared'
+  `, rP);
+  const clearedRuns = clearedRows[0].c;
 
   const levelCount = Math.max(
     DEFAULT_LEVELS.length,
@@ -119,8 +121,11 @@ export function computeStats(range = {}) {
 
   return {
     range: { from: from || null, to: to || null },
-    overview: { total_runs: totalRuns, cleared_runs: clearedRuns,
-      total_attempts: rows.reduce((s, r) => s + (r.attempts_total || 0), 0) },
+    overview: {
+      total_runs: totalRuns,
+      cleared_runs: clearedRuns,
+      total_attempts: rows.reduce((s, r) => s + (r.attempts_total || 0), 0),
+    },
     levels,
   };
 }

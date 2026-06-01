@@ -1,22 +1,27 @@
-// SQLite 连接 + 建表 + 默认时长灌入
+// Postgres 连接 + 建表 + 默认时长灌入。
+// 原 better-sqlite3(本地文件、同步)改为 pg(托管 Postgres、异步),数据可跨重启持久化。
 import './env.js';
-import Database from 'better-sqlite3';
-import { fileURLToPath } from 'node:url';
-import { dirname, join, resolve } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import pg from 'pg';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.DATA_DIR
-  ? resolve(process.cwd(), process.env.DATA_DIR)
-  : join(__dirname, '..', 'data');
-mkdirSync(DATA_DIR, { recursive: true });
+const { Pool } = pg;
 
-export const db = new Database(join(DATA_DIR, 'app.db'));
-db.pragma('journal_mode = WAL');
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('[config] DATABASE_URL 未设置(Render Postgres 连接串)');
+}
+
+// 外部连接(.render.com / 含 sslmode=require)需 SSL;内部连接与本地无需。
+const needSsl = /\.render\.com|sslmode=require|amazonaws\.com/.test(connectionString) ||
+  process.env.PGSSL === 'true';
+
+export const pool = new Pool({
+  connectionString,
+  ssl: needSsl ? { rejectUnauthorized: false } : false,
+  max: 5,
+});
 
 // ---------- 默认过关时长 ----------
-// 与游戏 trick-brick/index.html 中 LEVELS[i].time 保持一致，作为后端初始值。
-// 这是「权威默认」：前端读不到后端时仍用自身代码里的同一组值，二者一致即天然 fallback。
+// 名称取自游戏 LEVEL_INTROS 主题名;time 与 trick-brick/index.html 的 LEVELS[i].time 一致。
 export const DEFAULT_LEVELS = [
   { index: 0, time: 8,  name: '第一关 · 填充' },
   { index: 1, time: 34, name: '第二关 · 毁灭' },
@@ -27,8 +32,7 @@ export const DEFAULT_LEVELS = [
   { index: 6, time: 55, name: '第七关 · 保护' },
 ];
 
-// ---------- 建表 ----------
-db.exec(`
+const SCHEMA = `
   CREATE TABLE IF NOT EXISTS level_config (
     level_index   INTEGER PRIMARY KEY,
     time_seconds  INTEGER NOT NULL,
@@ -37,7 +41,6 @@ db.exec(`
     updated_by    TEXT DEFAULT 'system'
   );
 
-  -- 一次「从头开始玩」= 一个 run（P2 起写入）
   CREATE TABLE IF NOT EXISTS run (
     run_id            TEXT PRIMARY KEY,
     ip_hash           TEXT,
@@ -49,9 +52,8 @@ db.exec(`
     ended_reason      TEXT
   );
 
-  -- 每关每次尝试一条（P2 起写入）
   CREATE TABLE IF NOT EXISTS level_attempt (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    id             BIGSERIAL PRIMARY KEY,
     run_id         TEXT,
     level_index    INTEGER,
     attempt_no     INTEGER,
@@ -66,33 +68,70 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_attempt_level ON level_attempt(level_index);
   CREATE INDEX IF NOT EXISTS idx_attempt_run   ON level_attempt(run_id);
-`);
+`;
 
-// ---------- 灌入默认时长（仅当该关尚不存在，已有配置不覆盖）----------
-const seedStmt = db.prepare(
-  `INSERT OR IGNORE INTO level_config (level_index, time_seconds, name, updated_at, updated_by)
-   VALUES (@index, @time, @name, @now, 'system')`
-);
-const now = new Date().toISOString();
-const seedAll = db.transaction((levels) => {
-  for (const lv of levels) seedStmt.run({ ...lv, now });
-});
-seedAll(DEFAULT_LEVELS);
-
-// ---------- 查询封装 ----------
-export function getLevelConfig() {
-  return db
-    .prepare('SELECT level_index, time_seconds FROM level_config ORDER BY level_index')
-    .all();
+// 建表 + 灌默认时长(已存在则不覆盖)。带重试,容忍 DB 启动稍慢。
+export async function initDb() {
+  let lastErr;
+  for (let i = 0; i < 8; i++) {
+    try {
+      await pool.query(SCHEMA);
+      const now = new Date().toISOString();
+      for (const lv of DEFAULT_LEVELS) {
+        await pool.query(
+          `INSERT INTO level_config (level_index, time_seconds, name, updated_at, updated_by)
+           VALUES ($1, $2, $3, $4, 'system')
+           ON CONFLICT (level_index) DO NOTHING`,
+          [lv.index, lv.time, lv.name, now]
+        );
+      }
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.error(`[db] init 第 ${i + 1} 次失败: ${e.message}`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  throw lastErr;
 }
 
-// 清除历史埋点数据(run / level_attempt)，不影响关卡时长配置(level_config)。
-// 事务保证两表同时清空，返回各删除行数。
-export function clearHistory() {
-  const tx = db.transaction(() => {
-    const attempts = db.prepare('DELETE FROM level_attempt').run().changes;
-    const runs = db.prepare('DELETE FROM run').run().changes;
-    return { level_attempt: attempts, run: runs };
-  });
-  return tx();
+// ---------- 查询封装 ----------
+export async function getLevelConfig() {
+  const { rows } = await pool.query(
+    'SELECT level_index, time_seconds FROM level_config ORDER BY level_index'
+  );
+  return rows;
+}
+
+export async function getAdminLevels() {
+  const { rows } = await pool.query(
+    'SELECT level_index, time_seconds, name, updated_at, updated_by FROM level_config ORDER BY level_index'
+  );
+  return rows;
+}
+
+// 改单关时长,返回受影响行数(0 表示该关不存在)
+export async function updateLevel(idx, timeSeconds) {
+  const r = await pool.query(
+    'UPDATE level_config SET time_seconds = $1, updated_at = $2, updated_by = $3 WHERE level_index = $4',
+    [Math.round(timeSeconds), new Date().toISOString(), 'admin', idx]
+  );
+  return r.rowCount;
+}
+
+// 清除历史埋点数据(run / level_attempt),事务保证两表同清,不影响关卡配置
+export async function clearHistory() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const a = await client.query('DELETE FROM level_attempt');
+    const r = await client.query('DELETE FROM run');
+    await client.query('COMMIT');
+    return { level_attempt: a.rowCount, run: r.rowCount };
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
 }

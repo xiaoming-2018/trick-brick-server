@@ -1,5 +1,13 @@
-# Render 部署蓝图(Blueprint)。Free Web Service 只能临时演示:
-# 本服务使用 SQLite,Render 免费实例的本地文件在休眠/重启/重部署后不保证保留。
+# Render 部署蓝图(Blueprint)。
+# 数据存 Render 免费 Postgres(下方 databases),Web 服务重启/重部署不丢数据。
+# 注意:Render 免费 Postgres 约 30 天后过期会被删除,长期使用需升级。
+databases:
+  - name: trick-brick-db
+    plan: free
+    region: singapore
+    databaseName: trickbrick
+    user: trickbrick
+
 services:
   - type: web
     name: trick-brick-server
@@ -10,6 +18,11 @@ services:
     startCommand: node src/app.js
     healthCheckPath: /api/levels/config
     envVars:
+      # Postgres 连接串:由上方数据库自动注入(内部连接,无需手填)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trick-brick-db
+          property: connectionString
       # 管理后台口令:部署后在 Render 控制台手动填写(sync:false 不写进仓库)
       - key: ADMIN_PASSWORD
         sync: false

@@ -4,7 +4,7 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
-import { getLevelConfig } from './db.js';
+import { getLevelConfig, initDb } from './db.js';
 import { recordEvent } from './track.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import adminRouter from './routes/admin.js';
@@ -44,19 +44,25 @@ app.use((req, res, next) => {
 
 // ---------- 公开 API ----------
 // 关卡时长配置：游戏启动时拉取，拉不到则用前端自带默认值（天然 fallback）
-app.get('/api/levels/config', (req, res) => {
+app.get('/api/levels/config', async (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ levels: getLevelConfig() });
+  try {
+    res.json({ levels: await getLevelConfig() });
+  } catch (e) {
+    // DB 暂不可用时返回空,前端会回退到自带默认时长
+    console.error('[config] error:', e.message);
+    res.json({ levels: [] });
+  }
 });
 
 // 埋点接收:持久化到 run / level_attempt。按 IP 限流防刷,IP 仅以哈希存储。
-app.post('/api/track', rateLimit({ windowMs: 60000, max: 240 }), (req, res) => {
+app.post('/api/track', rateLimit({ windowMs: 60000, max: 240 }), async (req, res) => {
   const ua = req.get('user-agent') || '';
   const body = req.body;
   // 支持单事件或事件数组(便于前端批量上报)
   const events = Array.isArray(body) ? body : [body];
   try {
-    for (const ev of events.slice(0, 50)) recordEvent(ev, req.ip, ua);
+    for (const ev of events.slice(0, 50)) await recordEvent(ev, req.ip, ua);
   } catch (e) {
     // 单条坏数据不影响整体;埋点失败对玩家无感
     console.error('[track] error:', e.message);
@@ -77,7 +83,15 @@ if (GAME_DIR && existsSync(GAME_DIR)) {
 
 app.get('/', (req, res) => res.send('trick-brick-server OK'));
 
-app.listen(PORT, () => {
-  console.log(`[server] 监听 http://localhost:${PORT}`);
-  console.log(`[api] GET /api/levels/config`);
-});
+// 先建表 + 灌默认时长,再开始监听(Postgres 需先初始化)
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`[server] 监听 http://localhost:${PORT}`);
+      console.log(`[api] GET /api/levels/config`);
+    });
+  })
+  .catch((e) => {
+    console.error('[db] 初始化失败,退出:', e.message);
+    process.exit(1);
+  });

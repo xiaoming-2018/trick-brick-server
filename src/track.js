@@ -1,7 +1,7 @@
-// 埋点接收与持久化:把前端上报的事件写入 run / level_attempt 表
+// 埋点接收与持久化:把前端上报的事件写入 run / level_attempt 表(Postgres,异步)。
 import './env.js';
 import crypto from 'node:crypto';
-import { db } from './db.js';
+import { pool } from './db.js';
 
 const IP_SALT = process.env.IP_SALT || 'dev-salt';
 const INSECURE_IP_SALT_VALUES = new Set(['', 'dev-salt', 'please-change-this-salt']);
@@ -15,29 +15,6 @@ export function hashIp(ip) {
   return crypto.createHash('sha256').update(String(ip || '') + IP_SALT).digest('hex').slice(0, 32);
 }
 
-// ---------- 预编译语句 ----------
-const ensureRun = db.prepare(
-  `INSERT OR IGNORE INTO run (run_id, ip_hash, user_agent, started_at, last_seen_at, max_level_reached, ended_reason)
-   VALUES (@run_id, @ip_hash, @ua, @now, @now, 0, NULL)`
-);
-const touchRun = db.prepare(
-  `UPDATE run SET last_seen_at = @now,
-                  max_level_reached = MAX(max_level_reached, @lvl)
-   WHERE run_id = @run_id`
-);
-const endRun = db.prepare(
-  `UPDATE run SET last_seen_at = @now,
-                  ended_reason = @reason,
-                  max_level_reached = MAX(max_level_reached, @lvl)
-   WHERE run_id = @run_id`
-);
-const insAttempt = db.prepare(
-  `INSERT INTO level_attempt
-     (run_id, level_index, attempt_no, allotted_time, outcome, duration_ms, time_left_ms, completion_pct, started_at, ended_at)
-   VALUES
-     (@run_id, @level_index, @attempt_no, @allotted_time, @outcome, @duration_ms, @time_left_ms, @completion_pct, @started_at, @now)`
-);
-
 // ---------- 校验工具 ----------
 const isStr = (v) => typeof v === 'string' && v.length > 0 && v.length <= 64;
 function int(v, lo, hi, dflt = null) {
@@ -49,24 +26,38 @@ function int(v, lo, hi, dflt = null) {
   return i;
 }
 
+// 任何事件先确保 run 行存在(防 game_start beacon 丢失导致孤儿尝试)
+async function ensureRun(run_id, ip_hash, ua, now) {
+  await pool.query(
+    `INSERT INTO run (run_id, ip_hash, user_agent, started_at, last_seen_at, max_level_reached, ended_reason)
+     VALUES ($1, $2, $3, $4, $4, 0, NULL)
+     ON CONFLICT (run_id) DO NOTHING`,
+    [run_id, ip_hash, ua, now]
+  );
+}
+async function touchRun(run_id, now, lvl) {
+  await pool.query(
+    `UPDATE run SET last_seen_at = $1, max_level_reached = GREATEST(max_level_reached, $2) WHERE run_id = $3`,
+    [now, lvl, run_id]
+  );
+}
+
 // 处理单个事件。ip 由调用方(app.js)从请求获取并传入,前端不可伪造。
-export function recordEvent(ev, ip, ua) {
+export async function recordEvent(ev, ip, ua) {
   if (!ev || !isStr(ev.run_id)) return false;
   const now = new Date().toISOString();
   const run_id = ev.run_id;
   const ip_hash = hashIp(ip);
 
-  // 任何事件都先确保 run 行存在(防 game_start beacon 丢失导致孤儿尝试)
-  ensureRun.run({ run_id, ip_hash, ua: (ua || '').slice(0, 300), now });
+  await ensureRun(run_id, ip_hash, (ua || '').slice(0, 300), now);
 
   switch (ev.type) {
     case 'game_start':
-      // run 行已由 ensureRun 建好,无需额外操作
       return true;
 
     case 'level_start': {
       const lvl = int(ev.level_index, 0, 999, 0);
-      touchRun.run({ run_id, now, lvl });
+      await touchRun(run_id, now, lvl);
       return true;
     }
 
@@ -74,26 +65,34 @@ export function recordEvent(ev, ip, ua) {
     case 'level_lose': {
       const lvl = int(ev.level_index, 0, 999, 0);
       const outcome = ev.type === 'level_win' ? 'win' : 'lose';
-      insAttempt.run({
-        run_id,
-        level_index: lvl,
-        attempt_no: int(ev.attempt_no, 1, 9999, 1),
-        allotted_time: int(ev.allotted_time, 0, 100000, 0),
-        outcome,
-        duration_ms: int(ev.duration_ms, 0, 36000000, 0),
-        time_left_ms: int(ev.time_left_ms, 0, 36000000, outcome === 'win' ? 0 : 0),
-        completion_pct: int(ev.completion_pct, 0, 100, outcome === 'win' ? 100 : 0),
-        started_at: isStr(ev.started_at) ? ev.started_at : null,
-        now,
-      });
-      touchRun.run({ run_id, now, lvl });
+      await pool.query(
+        `INSERT INTO level_attempt
+           (run_id, level_index, attempt_no, allotted_time, outcome, duration_ms, time_left_ms, completion_pct, started_at, ended_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          run_id,
+          lvl,
+          int(ev.attempt_no, 1, 9999, 1),
+          int(ev.allotted_time, 0, 100000, 0),
+          outcome,
+          int(ev.duration_ms, 0, 36000000, 0),
+          int(ev.time_left_ms, 0, 36000000, 0),
+          int(ev.completion_pct, 0, 100, outcome === 'win' ? 100 : 0),
+          isStr(ev.started_at) ? ev.started_at : null,
+          now,
+        ]
+      );
+      await touchRun(run_id, now, lvl);
       return true;
     }
 
     case 'run_quit': {
       const reason = ev.reason === 'cleared' ? 'cleared' : 'quit';
       const lvl = int(ev.max_level_reached, 0, 999, 0);
-      endRun.run({ run_id, now, reason, lvl });
+      await pool.query(
+        `UPDATE run SET last_seen_at = $1, ended_reason = $2, max_level_reached = GREATEST(max_level_reached, $3) WHERE run_id = $4`,
+        [now, reason, lvl, run_id]
+      );
       return true;
     }
 
