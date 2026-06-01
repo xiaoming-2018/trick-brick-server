@@ -22,13 +22,18 @@ function missingSecrets(env) {
 }
 
 // ---------- CORS（游戏与后端跨域时启用）----------
+// 允许来源：CORS_ORIGIN 为 * 时放开任意来源；否则按逗号分隔白名单匹配。
+// 命中后回显具体请求 Origin（不能用 *）并允许携带凭证，否则 sendBeacon 等带凭证请求会被拦。
 app.use('/api/*', async (c, next) => {
-  const origin = c.env.CORS_ORIGIN;
-  if (origin) {
+  const conf = (c.env.CORS_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const allowAll = conf.includes('*');
+  const origin = c.req.header('origin');
+  if (origin && (allowAll || conf.includes(origin))) {
     c.header('Access-Control-Allow-Origin', origin);
+    c.header('Access-Control-Allow-Credentials', 'true');
+    c.header('Vary', 'Origin');
     c.header('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
     c.header('Access-Control-Allow-Headers', 'Content-Type');
-    c.header('Access-Control-Allow-Credentials', 'true');
   }
   if (c.req.method === 'OPTIONS') return c.body(null, 204);
   await next();

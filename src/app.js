@@ -31,7 +31,9 @@ app.use(express.json({ limit: '32kb' })); // 埋点请求体小，限制大小�
 app.use((req, res, next) => {
   const origin = req.get('origin');
   if (origin && (CORS_ALLOW_ALL || CORS_ORIGINS.includes(origin))) {
-    res.setHeader('Access-Control-Allow-Origin', CORS_ALLOW_ALL ? '*' : origin);
+    // 回显具体 Origin(不能用 *),并允许携带凭证——sendBeacon 等带凭证请求否则会被浏览器拦截
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
