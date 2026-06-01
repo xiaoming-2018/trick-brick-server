@@ -1,0 +1,18 @@
+{
+  "name": "trick-brick-server",
+  "version": "0.1.0",
+  "description": "会捣乱的积木 · 后台管理系统（配置过关时长 + 埋点 + 难度分析）",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  }
+}

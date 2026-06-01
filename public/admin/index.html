@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>会捣乱的积木 · 后台管理</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🧱</text></svg>">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:#f4f5f7; color:#222; }
+  header { background:#2a2f3a; color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-size:18px; font-weight:700; }
+  header .sp { font-size:13px; opacity:.8; }
+  #logout, #help-btn { background:transparent; border:1px solid rgba(255,255,255,.5); color:#fff; border-radius:8px; padding:6px 14px; cursor:pointer; font-size:13px; }
+  #logout:hover, #help-btn:hover { background:rgba(255,255,255,.12); }
+  main { max-width:1080px; margin:24px auto; padding:0 16px; }
+
+  /* 登录 */
+  #login { max-width:360px; margin:12vh auto; background:#fff; border-radius:14px; box-shadow:0 8px 30px rgba(0,0,0,.08); padding:32px 28px; }
+  #login h2 { font-size:20px; margin-bottom:18px; text-align:center; }
+  #login input { width:100%; padding:11px 12px; border:1px solid #d0d4da; border-radius:9px; font-size:15px; margin-bottom:12px; }
+  #login button { width:100%; padding:11px; border:none; border-radius:9px; background:#3b82f6; color:#fff; font-size:15px; font-weight:600; cursor:pointer; }
+  #login button:hover { background:#2f6fe0; }
+  #login .err { color:#dc2626; font-size:13px; min-height:18px; text-align:center; margin-bottom:8px; }
+
+  /* 卡片/表格 */
+  .card { background:#fff; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,.05); padding:20px 22px; margin-bottom:22px; }
+  .card h2 { font-size:17px; margin-bottom:4px; }
+  .card .desc { font-size:13px; color:#6b7280; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:11px 10px; border-bottom:1px solid #eef0f3; font-size:14px; }
+  th { font-size:12px; color:#6b7280; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  td.num input { width:90px; padding:7px 9px; border:1px solid #d0d4da; border-radius:7px; font-size:14px; text-align:center; }
+  .default { color:#9aa1ac; font-size:13px; }
+  .upd { color:#9aa1ac; font-size:12px; }
+  .btn { border:none; border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer; }
+  .btn-save { background:#10b981; color:#fff; }
+  .btn-save:hover { background:#0ea372; }
+  .btn-reset { background:#eef0f3; color:#555; margin-left:6px; }
+  .btn-reset:hover { background:#e2e5ea; }
+  .hidden { display:none !important; }
+  #toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:10px 20px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; }
+  #toast.show { opacity:.95; }
+  .stat-box { flex:1; min-width:130px; background:#f8fafc; border:1px solid #eef0f3; border-radius:10px; padding:12px 16px; }
+  .stat-box .v { font-size:24px; font-weight:800; }
+  .stat-box .l { font-size:12px; color:#6b7280; margin-top:2px; }
+  .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .badge.ok    { background:#dcfce7; color:#15803d; }
+  .badge.loose { background:#fef9c3; color:#a16207; }
+  .badge.tight { background:#ffedd5; color:#c2410c; }
+  .badge.hard  { background:#fee2e2; color:#b91c1c; }
+  .badge.info  { background:#e5e7eb; color:#4b5563; }
+  .diff-pill { display:inline-block; min-width:34px; text-align:center; padding:2px 8px; border-radius:7px; font-weight:700; color:#fff; }
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+  @media(max-width:760px){ .grid-2{grid-template-columns:1fr;} }
+  /* 使用帮助弹窗 */
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .modal.show { display:flex; }
+  .modal-card { background:#fff; border-radius:14px; max-width:640px; width:100%; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-bottom:1px solid #eef0f3; }
+  .modal-head h2 { font-size:18px; }
+  .modal-head button { border:none; background:#f1f3f5; width:30px; height:30px; border-radius:8px; cursor:pointer; font-size:15px; }
+  .modal-head button:hover { background:#e2e5ea; }
+  .modal-body { padding:18px 22px; overflow-y:auto; }
+  .modal-body h3 { font-size:15px; margin:16px 0 6px; }
+  .modal-body h3:first-child { margin-top:0; }
+  .modal-body p, .modal-body li { font-size:14px; line-height:1.75; color:#374151; }
+  .modal-body ul { padding-left:18px; margin:4px 0; }
+  .modal-body li { margin:3px 0; }
+</style>
+</head>
+<body>
+  <!-- 登录 -->
+  <div id="login">
+    <h2>🧱 后台管理登录</h2>
+    <div class="err" id="login-err"></div>
+    <input type="password" id="pw" placeholder="管理口令" autocomplete="current-password" />
+    <button id="login-btn">登录</button>
+  </div>
+
+  <!-- 主体(登录后显示) -->
+  <div id="app" class="hidden">
+    <header>
+      <h1>🧱 会捣乱的积木 · 后台管理</h1>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="help-btn">📖 使用帮助</button>
+        <button id="logout">退出登录</button>
+      </div>
+    </header>
+    <main>
+      <div class="card">
+        <h2>关卡过关时长</h2>
+        <p class="desc">修改后保存即刻生效;玩家下次进入游戏(开屏点击开始)时拉取。游戏读不到后端时使用前端默认值。</p>
+        <table>
+          <thead>
+            <tr><th>关卡</th><th>名称</th><th>过关时长(秒)</th><th>默认</th><th>最近更新</th><th></th></tr>
+          </thead>
+          <tbody id="lv-body"></tbody>
+        </table>
+      </div>
+      <!-- 数据看板 -->
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+          <div>
+            <h2>难度分析看板</h2>
+            <p class="desc" style="margin-bottom:0;">基于玩家埋点的关卡难易度与时长合理性分析</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+            <label>起 <input type="date" id="from"></label>
+            <label>止 <input type="date" id="to"></label>
+            <button class="btn btn-save" id="apply">应用</button>
+            <button class="btn btn-reset" id="clear-range">全部</button>
+          </div>
+        </div>
+        <div id="overview" style="display:flex;gap:14px;margin:14px 0 6px;flex-wrap:wrap;"></div>
+        <div id="empty-tip" class="desc hidden" style="padding:20px;text-align:center;">暂无埋点数据。让玩家玩几局后回来查看~</div>
+      </div>
+
+      <div class="card">
+        <h2>关卡漏斗(到达 vs 通过人数)</h2>
+        <p class="desc">流失集中在哪一关一目了然</p>
+        <canvas id="ch-funnel" height="110"></canvas>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
+        <div class="card"><h2>各关通关率</h2><p class="desc">到达该关的玩家中最终通过的比例</p><canvas id="ch-pass" height="170"></canvas></div>
+        <div class="card"><h2>各关平均尝试次数</h2><p class="desc">越高=越容易卡</p><canvas id="ch-attempts" height="170"></canvas></div>
+        <div class="card"><h2>通关剩余时间占比</h2><p class="desc">偏高→时长可缩短;接近 0→时间紧</p><canvas id="ch-timeleft" height="170"></canvas></div>
+        <div class="card"><h2>综合难度分</h2><p class="desc">0~100,越高越难</p><canvas id="ch-diff" height="170"></canvas></div>
+      </div>
+
+      <div class="card">
+        <h2>关卡指标明细与调参建议</h2>
+        <table>
+          <thead><tr>
+            <th>关卡</th><th>到达/通过</th><th>通关率</th><th>平均尝试</th>
+            <th>首次通关率</th><th>剩余时间%</th><th>失败完成%</th><th>难度</th><th>建议</th>
+          </tr></thead>
+          <tbody id="stats-body"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- 使用帮助弹窗 -->
+  <div id="help-modal" class="modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>📖 后台使用帮助</h2>
+        <button id="help-close" title="关闭">✕</button>
+      </div>
+      <div class="modal-body">
+        <h3>调整过关时长</h3>
+        <p>在「关卡过关时长」表里改数字 → 点 <b>保存</b> 即生效;点 <b>恢复默认</b> 可还原。玩家 <b>下次进入游戏</b>(开屏点开始)时拉取新时长,正在进行的一局不受影响。</p>
+
+        <h3>看板图表怎么看</h3>
+        <ul>
+          <li><b>漏斗(到达 vs 通过)</b>:两根柱差距越大 = 卡在这关、流失越多。</li>
+          <li><b>各关通关率</b>:越低越难。</li>
+          <li><b>平均尝试次数</b>:越高越容易卡(1 = 基本一次过)。</li>
+          <li><b>剩余时间占比</b>:偏高 = 时间给太多(可缩短);接近 0 = 时间很紧。</li>
+          <li><b>综合难度分</b>:绿色简单、红色难,一眼看出最难的关。</li>
+        </ul>
+
+        <h3>调参建议标签 → 对应动作</h3>
+        <ul>
+          <li><span class="badge ok">合理</span> 难度与时长合适,不用动</li>
+          <li><span class="badge loose">偏松</span> 玩家剩很多时间,可缩短时长(标签给参考秒数)</li>
+          <li><span class="badge tight">偏紧</span> 玩家常差一点,建议加时间</li>
+          <li><span class="badge hard">偏难</span> 失败完成度很低,加时作用小,考虑降低难度</li>
+          <li><span class="badge info">样本不足</span> 数据太少,等更多玩家再判断</li>
+        </ul>
+
+        <h3>按时间段分析</h3>
+        <p>右上角选「起 / 止」日期 → <b>应用</b>,只看该时段数据;<b>全部</b> 看全部历史。改完时长后,过几天用"改之后"的日期段再看一次,可对比调整效果。</p>
+
+        <p style="color:#9aa1ac;font-size:13px;margin-top:14px;">完整版见工程内《后台使用说明.md》。</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="vendor/chart.umd.min.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

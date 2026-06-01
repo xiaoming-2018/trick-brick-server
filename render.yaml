@@ -1,0 +1,25 @@
+# Render 部署蓝图(Blueprint)。Free Web Service 只能临时演示:
+# 本服务使用 SQLite,Render 免费实例的本地文件在休眠/重启/重部署后不保证保留。
+services:
+  - type: web
+    name: trick-brick-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/app.js
+    healthCheckPath: /api/levels/config
+    envVars:
+      # 管理后台口令:部署后在 Render 控制台手动填写(sync:false 不写进仓库)
+      - key: ADMIN_PASSWORD
+        sync: false
+      # 登录令牌密钥 / IP 哈希盐:由 Render 自动生成随机值,无需手填
+      - key: JWT_SECRET
+        generateValue: true
+      - key: IP_SALT
+        generateValue: true
+      # 允许前端(GitHub Pages)跨域访问
+      - key: CORS_ORIGIN
+        value: https://wyuegood-afk.github.io
+      # 后端不再托管游戏前端(前端在 Pages),留空即可
+      - key: GAME_DIR
+        value: ""
