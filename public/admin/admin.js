@@ -196,6 +196,21 @@
   $('apply').onclick = loadStats;
   $('clear-range').onclick = function () { $('from').value = ''; $('to').value = ''; loadStats(); };
 
+  // 清除历史数据(二次确认,不可撤销;只清埋点,不影响关卡时长配置)
+  $('clear-data').onclick = function () {
+    if (!confirm('确定清除全部历史埋点数据吗?\n\n将删除所有游玩记录与关卡尝试,难度分析数据归零。\n关卡时长配置不受影响。此操作不可撤销!')) return;
+    api('/data/clear', { method: 'POST' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          var del = (res.d && res.d.deleted) || {};
+          toast('已清除 ' + (del.run || 0) + ' 条游玩 · ' + (del.level_attempt || 0) + ' 条尝试');
+          loadStats();
+        } else toast((res.d && res.d.error) || '清除失败');
+      })
+      .catch(function () { toast('网络错误'); });
+  };
+
   // ---------- 使用帮助弹窗 ----------
   $('help-btn').onclick = function () { $('help-modal').classList.add('show'); };
   $('help-close').onclick = function () { $('help-modal').classList.remove('show'); };

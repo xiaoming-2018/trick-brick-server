@@ -85,3 +85,14 @@ export function getLevelConfig() {
     .prepare('SELECT level_index, time_seconds FROM level_config ORDER BY level_index')
     .all();
 }
+
+// 清除历史埋点数据(run / level_attempt)，不影响关卡时长配置(level_config)。
+// 事务保证两表同时清空，返回各删除行数。
+export function clearHistory() {
+  const tx = db.transaction(() => {
+    const attempts = db.prepare('DELETE FROM level_attempt').run().changes;
+    const runs = db.prepare('DELETE FROM run').run().changes;
+    return { level_attempt: attempts, run: runs };
+  });
+  return tx();
+}

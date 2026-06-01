@@ -1,6 +1,6 @@
 // 管理 API:登录 / 登出 / 读改关卡时长。除 login 外均需鉴权。
 import express from 'express';
-import { db, DEFAULT_LEVELS } from '../db.js';
+import { db, DEFAULT_LEVELS, clearHistory } from '../db.js';
 import { computeStats } from '../stats.js';
 import {
   issueToken, requireAuth, checkPassword, isAuthed,
@@ -65,6 +65,17 @@ router.put('/levels/:idx', requireAuth, (req, res) => {
     .run(Math.round(t), new Date().toISOString(), 'admin', idx);
   if (info.changes === 0) return res.status(404).json({ error: '关卡不存在' });
   res.json({ ok: true, level_index: idx, time_seconds: Math.round(t) });
+});
+
+// 清除历史埋点数据(run / level_attempt),不影响关卡时长配置
+router.post('/data/clear', requireAuth, (req, res) => {
+  try {
+    const deleted = clearHistory();
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    console.error('[clear] error:', e.message);
+    res.status(500).json({ error: '清除失败' });
+  }
 });
 
 // 难度分析统计(可选 from/to 时间范围,ISO 字符串)

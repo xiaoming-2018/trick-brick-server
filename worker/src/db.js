@@ -28,6 +28,15 @@ export async function getAdminLevels(DB) {
   return results;
 }
 
+// 清除历史埋点数据(run / level_attempt)，不影响关卡时长配置。batch 保证原子。
+export async function clearHistory(DB) {
+  const [a, r] = await DB.batch([
+    DB.prepare('DELETE FROM level_attempt'),
+    DB.prepare('DELETE FROM run'),
+  ]);
+  return { level_attempt: a.meta.changes, run: r.meta.changes };
+}
+
 // 后台：改单关时长，返回受影响行数（0 表示该关不存在）
 export async function updateLevel(DB, idx, timeSeconds) {
   const res = await DB.prepare(

@@ -2,7 +2,7 @@
 // 静态资源（/admin、/game）由 Workers Assets 直接托管，不进这里；本 Worker 只处理 /api/* 与 /。
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { getLevelConfig, getAdminLevels, updateLevel, DEFAULT_LEVELS } from './db.js';
+import { getLevelConfig, getAdminLevels, updateLevel, clearHistory, DEFAULT_LEVELS } from './db.js';
 import { recordEvents } from './track.js';
 import { computeStats } from './stats.js';
 import {
@@ -122,6 +122,17 @@ admin.put('/levels/:idx', requireAuth, async (c) => {
   const changes = await updateLevel(c.env.DB, idx, t);
   if (changes === 0) return c.json({ error: '关卡不存在' }, 404);
   return c.json({ ok: true, level_index: idx, time_seconds: Math.round(t) });
+});
+
+// 清除历史埋点数据（run / level_attempt），不影响关卡时长配置
+admin.post('/data/clear', requireAuth, async (c) => {
+  try {
+    const deleted = await clearHistory(c.env.DB);
+    return c.json({ ok: true, deleted });
+  } catch (e) {
+    console.error('[clear] error:', e.message);
+    return c.json({ error: '清除失败' }, 500);
+  }
 });
 
 // 难度分析统计（可选 from/to 时间范围，ISO 字符串）

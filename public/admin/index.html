@@ -38,6 +38,8 @@
   .btn-save:hover { background:#0ea372; }
   .btn-reset { background:#eef0f3; color:#555; margin-left:6px; }
   .btn-reset:hover { background:#e2e5ea; }
+  .btn-danger { background:#ef4444; color:#fff; }
+  .btn-danger:hover { background:#dc2626; }
   .hidden { display:none !important; }
   #toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:#222; color:#fff; padding:10px 20px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; }
   #toast.show { opacity:.95; }
@@ -110,6 +112,7 @@
             <label>止 <input type="date" id="to"></label>
             <button class="btn btn-save" id="apply">应用</button>
             <button class="btn btn-reset" id="clear-range">全部</button>
+            <button class="btn btn-danger" id="clear-data">🗑 清除历史数据</button>
           </div>
         </div>
         <div id="overview" style="display:flex;gap:14px;margin:14px 0 6px;flex-wrap:wrap;"></div>
