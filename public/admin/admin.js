@@ -21,8 +21,29 @@
   function showApp(authed) {
     $('login').classList.toggle('hidden', authed);
     $('app').classList.toggle('hidden', !authed);
-    if (authed) { loadLevels(); loadStats(); }
+    if (authed) switchTab('levels');   // 默认进"过关时长"tab
   }
+
+  // ---------- 选项卡 ----------
+  function switchTab(name) {
+    var tabs = document.querySelectorAll('.tabs .tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('active', tabs[i].getAttribute('data-tab') === name);
+    }
+    $('tab-levels').classList.toggle('hidden', name !== 'levels');
+    $('tab-dashboard').classList.toggle('hidden', name !== 'dashboard');
+    // 切到哪个 tab 就加载哪个的数据;看板在可见时才渲染,图表尺寸才正确
+    if (name === 'dashboard') loadStats();
+    else loadLevels();
+  }
+  (function bindTabs() {
+    var tabs = document.querySelectorAll('.tabs .tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].onclick = (function (el) {
+        return function () { switchTab(el.getAttribute('data-tab')); };
+      })(tabs[i]);
+    }
+  })();
 
   // ---------- 登录 ----------
   function login() {
