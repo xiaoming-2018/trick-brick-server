@@ -62,6 +62,26 @@
   .diff-pill { display:inline-block; min-width:34px; text-align:center; padding:2px 8px; border-radius:7px; font-weight:700; color:#fff; }
   .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
   @media(max-width:760px){ .grid-2{grid-template-columns:1fr;} }
+  /* 宽表格在窄屏横向滚动,避免挤压/溢出 */
+  .table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  /* 手机端适配 */
+  @media (max-width:600px) {
+    header { padding:12px 14px; flex-wrap:wrap; gap:8px; }
+    header h1 { font-size:15px; }
+    #logout, #help-btn { padding:5px 10px; font-size:12px; }
+    main { margin:14px auto; padding:0 10px; }
+    .card { padding:14px 14px; border-radius:12px; margin-bottom:16px; }
+    .card h2 { font-size:16px; }
+    .tabs { gap:0; }
+    .tabs .tab { flex:1; padding:11px 6px; font-size:14px; text-align:center; }
+    th,td { padding:9px 8px; font-size:13px; }
+    .table-wrap table { min-width:540px; }   /* 触发横向滚动而非压扁 */
+    .stat-box { min-width:calc(50% - 7px); }  /* 概览每行两个 */
+    .stat-box .v { font-size:20px; }
+    .filter-bar { width:100%; flex-wrap:wrap; }
+    .filter-bar .btn { flex:1; }
+    .modal-card { max-height:90vh; }
+  }
   /* 使用帮助弹窗 */
   .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
   .modal.show { display:flex; }
@@ -107,12 +127,14 @@
       <div class="card">
         <h2>关卡过关时长</h2>
         <p class="desc">修改后保存即刻生效;玩家下次进入游戏(开屏点击开始)时拉取。游戏读不到后端时使用前端默认值。</p>
+        <div class="table-wrap">
         <table>
           <thead>
             <tr><th>关卡</th><th>名称</th><th>过关时长(秒)</th><th>默认</th><th>最近更新</th><th></th></tr>
           </thead>
           <tbody id="lv-body"></tbody>
         </table>
+        </div>
       </div>
       </div>
 
@@ -124,7 +146,7 @@
             <h2>难度分析看板</h2>
             <p class="desc" style="margin-bottom:0;">基于玩家埋点的关卡难易度与时长合理性分析</p>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <div class="filter-bar" style="display:flex;align-items:center;gap:8px;font-size:13px;">
             <label>起 <input type="date" id="from"></label>
             <label>止 <input type="date" id="to"></label>
             <button class="btn btn-save" id="apply">应用</button>
@@ -142,7 +164,7 @@
         <canvas id="ch-funnel" height="110"></canvas>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
+      <div class="grid-2">
         <div class="card"><h2>各关通关率</h2><p class="desc">到达该关的玩家中最终通过的比例</p><canvas id="ch-pass" height="170"></canvas></div>
         <div class="card"><h2>各关平均尝试次数</h2><p class="desc">越高=越容易卡</p><canvas id="ch-attempts" height="170"></canvas></div>
         <div class="card"><h2>通关剩余时间占比</h2><p class="desc">偏高→时长可缩短;接近 0→时间紧</p><canvas id="ch-timeleft" height="170"></canvas></div>
@@ -156,10 +178,12 @@
           <div><p class="desc" style="margin-bottom:6px;">各平台游玩次数(分布)</p><canvas id="ch-platform" height="160"></canvas></div>
           <div><p class="desc" style="margin-bottom:6px;">各平台平均到达关(越低越吃力)</p><canvas id="ch-platform-reach" height="160"></canvas></div>
         </div>
-        <table style="margin-top:16px;">
+        <div class="table-wrap" style="margin-top:16px;">
+        <table>
           <thead><tr><th>平台</th><th>游玩次数</th><th>独立访客</th><th>通关数</th><th>通关率</th><th>平均到达关</th></tr></thead>
           <tbody id="platform-body"></tbody>
         </table>
+        </div>
       </div>
 
       <div class="card">
@@ -170,6 +194,7 @@
 
       <div class="card">
         <h2>关卡指标明细与调参建议</h2>
+        <div class="table-wrap">
         <table>
           <thead><tr>
             <th>关卡</th><th>到达/通过</th><th>通关率</th><th>平均尝试</th>
@@ -177,6 +202,7 @@
           </tr></thead>
           <tbody id="stats-body"></tbody>
         </table>
+        </div>
       </div>
       </div>
     </main>
