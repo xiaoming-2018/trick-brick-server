@@ -18,6 +18,9 @@
     toastTimer = setTimeout(function () { t.classList.remove('show'); }, 1800);
   }
 
+  function showLoading() { $('loading').classList.remove('hidden'); }
+  function hideLoading() { $('loading').classList.add('hidden'); }
+
   function showApp(authed) {
     $('login').classList.toggle('hidden', authed);
     $('app').classList.toggle('hidden', !authed);
@@ -148,13 +151,14 @@
     var f = $('from').value, t = $('to').value;
     if (f) qs.push('from=' + encodeURIComponent(f + 'T00:00:00.000Z'));
     if (t) qs.push('to=' + encodeURIComponent(t + 'T23:59:59.999Z'));
+    showLoading();
     api('/stats' + (qs.length ? '?' + qs.join('&') : '')).then(function (r) {
       if (r.status === 401) { showApp(false); return null; }
       return r.json();
     }).then(function (s) {
-      if (!s) return;
-      renderStats(s);
-    }).catch(function () { toast('统计加载失败'); });
+      if (s) renderStats(s);
+    }).catch(function () { toast('统计加载失败'); })
+      .then(function () { hideLoading(); });   // 成功/失败都收起 loading
   }
 
   function renderStats(s) {
@@ -331,6 +335,10 @@
 
   // ---------- 启动:检查登录态 ----------
   api('/me').then(function (r) { return r.json(); })
-    .then(function (d) { showApp(!!(d && d.authed)); })
-    .catch(function () { showApp(false); });
+    .then(function (d) {
+      var authed = !!(d && d.authed);
+      showApp(authed);
+      if (!authed) hideLoading();   // 未登录:显示登录页并收起 loading;已登录由 loadStats 收起
+    })
+    .catch(function () { showApp(false); hideLoading(); });
 })();
