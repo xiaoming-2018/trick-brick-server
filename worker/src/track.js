@@ -25,11 +25,13 @@ export async function recordEvents(DB, body, ipHash, ua) {
 }
 
 // 任何事件先确保 run 行存在（防 game_start beacon 丢失导致孤儿尝试）
-function ensureRun(DB, run_id, ipHash, ua, now) {
+// visitor_id 由前端 localStorage 生成并随事件上报;为空时用后续事件回填。
+function ensureRun(DB, run_id, ipHash, ua, visitorId, now) {
   return DB.prepare(
-    `INSERT OR IGNORE INTO run (run_id, ip_hash, user_agent, started_at, last_seen_at, max_level_reached, ended_reason)
-     VALUES (?, ?, ?, ?, ?, 0, NULL)`
-  ).bind(run_id, ipHash, ua, now, now);
+    `INSERT INTO run (run_id, ip_hash, user_agent, visitor_id, started_at, last_seen_at, max_level_reached, ended_reason)
+     VALUES (?, ?, ?, ?, ?, ?, 0, NULL)
+     ON CONFLICT(run_id) DO UPDATE SET visitor_id = COALESCE(run.visitor_id, excluded.visitor_id)`
+  ).bind(run_id, ipHash, ua, visitorId, now, now);
 }
 function touchRun(DB, run_id, now, lvl) {
   return DB.prepare(
@@ -40,7 +42,8 @@ function touchRun(DB, run_id, now, lvl) {
 function collectStatements(DB, stmts, ev, ipHash, ua, now) {
   if (!ev || !isStr(ev.run_id)) return;
   const run_id = ev.run_id;
-  stmts.push(ensureRun(DB, run_id, ipHash, ua, now));
+  const visitorId = isStr(ev.visitor_id) ? ev.visitor_id : null;
+  stmts.push(ensureRun(DB, run_id, ipHash, ua, visitorId, now));
 
   switch (ev.type) {
     case 'game_start':

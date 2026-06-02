@@ -46,6 +46,7 @@ const SCHEMA = `
     ip_hash           TEXT,
     geo               TEXT,
     user_agent        TEXT,
+    visitor_id        TEXT,
     started_at        TEXT,
     last_seen_at      TEXT,
     max_level_reached INTEGER DEFAULT 0,
@@ -76,6 +77,8 @@ export async function initDb() {
   for (let i = 0; i < 8; i++) {
     try {
       await pool.query(SCHEMA);
+      // 已有库的平滑迁移:补上 visitor_id 列(幂等)
+      await pool.query('ALTER TABLE run ADD COLUMN IF NOT EXISTS visitor_id TEXT');
       const now = new Date().toISOString();
       for (const lv of DEFAULT_LEVELS) {
         await pool.query(

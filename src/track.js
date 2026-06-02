@@ -27,12 +27,13 @@ function int(v, lo, hi, dflt = null) {
 }
 
 // 任何事件先确保 run 行存在(防 game_start beacon 丢失导致孤儿尝试)
-async function ensureRun(run_id, ip_hash, ua, now) {
+// visitor_id 由前端 localStorage 生成并随每条事件上报;为空时用后续事件回填。
+async function ensureRun(run_id, ip_hash, ua, visitor_id, now) {
   await pool.query(
-    `INSERT INTO run (run_id, ip_hash, user_agent, started_at, last_seen_at, max_level_reached, ended_reason)
-     VALUES ($1, $2, $3, $4, $4, 0, NULL)
-     ON CONFLICT (run_id) DO NOTHING`,
-    [run_id, ip_hash, ua, now]
+    `INSERT INTO run (run_id, ip_hash, user_agent, visitor_id, started_at, last_seen_at, max_level_reached, ended_reason)
+     VALUES ($1, $2, $3, $4, $5, $5, 0, NULL)
+     ON CONFLICT (run_id) DO UPDATE SET visitor_id = COALESCE(run.visitor_id, EXCLUDED.visitor_id)`,
+    [run_id, ip_hash, ua, visitor_id, now]
   );
 }
 async function touchRun(run_id, now, lvl) {
@@ -48,8 +49,9 @@ export async function recordEvent(ev, ip, ua) {
   const now = new Date().toISOString();
   const run_id = ev.run_id;
   const ip_hash = hashIp(ip);
+  const visitor_id = isStr(ev.visitor_id) ? ev.visitor_id : null;
 
-  await ensureRun(run_id, ip_hash, (ua || '').slice(0, 300), now);
+  await ensureRun(run_id, ip_hash, (ua || '').slice(0, 300), visitor_id, now);
 
   switch (ev.type) {
     case 'game_start':

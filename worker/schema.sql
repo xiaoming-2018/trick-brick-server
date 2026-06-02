@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS run (
   ip_hash           TEXT,
   geo               TEXT,
   user_agent        TEXT,
+  visitor_id        TEXT,
   started_at        TEXT,
   last_seen_at      TEXT,
   max_level_reached INTEGER DEFAULT 0,
