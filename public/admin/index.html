@@ -152,11 +152,20 @@
       <div class="card">
         <h2>平台分布与表现</h2>
         <p class="desc">按操作系统/设备平台看游玩量与通关表现;通关率/平均到达关越低 = 该平台玩起来越吃力</p>
-        <canvas id="ch-platform" height="120"></canvas>
+        <div class="grid-2">
+          <div><p class="desc" style="margin-bottom:6px;">各平台游玩次数(分布)</p><canvas id="ch-platform" height="160"></canvas></div>
+          <div><p class="desc" style="margin-bottom:6px;">各平台平均到达关(越低越吃力)</p><canvas id="ch-platform-reach" height="160"></canvas></div>
+        </div>
         <table style="margin-top:16px;">
           <thead><tr><th>平台</th><th>游玩次数</th><th>独立访客</th><th>通关数</th><th>通关率</th><th>平均到达关</th></tr></thead>
           <tbody id="platform-body"></tbody>
         </table>
+      </div>
+
+      <div class="card">
+        <h2>各关在不同平台的通关率</h2>
+        <p class="desc">每条线是一个平台;对比同一关在各平台的通关率,线越低 = 该平台这一关越吃力(空缺=该平台没人玩到这关)</p>
+        <canvas id="ch-platform-levels" height="120"></canvas>
       </div>
 
       <div class="card">

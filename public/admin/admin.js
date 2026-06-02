@@ -194,6 +194,7 @@
       s.levels.map(function (l) { return diffColor(l.difficulty); }), { label: '难度分', max: 100 });
 
     renderPlatforms(s.platforms);
+    renderPlatformLevels(s.platformLevels);
 
     // 明细表
     var body = $('stats-body'); body.innerHTML = '';
@@ -217,11 +218,20 @@
     return '<div class="stat-box"><div class="v">' + (v || 0) + '</div><div class="l">' + label + '</div></div>';
   }
 
+  var PLAT_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899'];
+
   // 平台分布与表现
   function renderPlatforms(platforms) {
     platforms = platforms || [];
     var labels = platforms.map(function (p) { return p.platform; });
     makeBar('ch-platform', labels, platforms.map(function (p) { return p.runs; }), '#8b5cf6', { label: '游玩次数' });
+    // 吃力图:平均到达关(越低越吃力),用红→绿按到达深浅着色
+    makeBar('ch-platform-reach', labels,
+      platforms.map(function (p) { return p.avg_max_level == null ? 0 : +p.avg_max_level.toFixed(2); }),
+      platforms.map(function (p) {
+        var ratio = Math.min((p.avg_max_level || 0) / 6, 1); // 0~6关映射 红→绿
+        return 'hsl(' + Math.round(ratio * 120) + ',65%,45%)';
+      }), { label: '平均到达关' });
     var body = $('platform-body'); body.innerHTML = '';
     if (!platforms.length) {
       body.innerHTML = '<tr><td colspan="6" class="desc" style="text-align:center;padding:16px;">暂无数据</td></tr>';
@@ -237,6 +247,33 @@
         '<td>' + pct(p.cleared_rate) + '</td>' +
         '<td>' + (p.avg_max_level == null ? '—' : p.avg_max_level.toFixed(1) + ' 关') + '</td>';
       body.appendChild(tr);
+    });
+  }
+
+  // 各关在不同平台的通关率(多条折线,一线一平台)
+  function renderPlatformLevels(platformLevels) {
+    platformLevels = platformLevels || [];
+    var maxLv = 0;
+    platformLevels.forEach(function (pl) { if (pl.levels.length > maxLv) maxLv = pl.levels.length; });
+    var labels = [];
+    for (var i = 0; i < maxLv; i++) labels.push('第' + (i + 1) + '关');
+    var datasets = platformLevels.map(function (pl, idx) {
+      var c = PLAT_COLORS[idx % PLAT_COLORS.length];
+      return {
+        label: pl.platform,
+        data: pl.levels.map(function (x) { return x.pass_rate == null ? null : Math.round(x.pass_rate * 100); }),
+        borderColor: c, backgroundColor: c, spanGaps: true, tension: 0.25, borderWidth: 2,
+      };
+    });
+    if (charts['ch-platform-levels']) charts['ch-platform-levels'].destroy();
+    charts['ch-platform-levels'] = new Chart($('ch-platform-levels').getContext('2d'), {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: true } },
+        scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '通关率%' } } },
+      },
     });
   }
 

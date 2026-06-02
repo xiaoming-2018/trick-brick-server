@@ -119,6 +119,22 @@ export async function computeStats(DB, range = {}) {
     cleared_rate: m.runs ? m.cleared / m.runs : 0,
     avg_max_level: m.runs ? m.reachedSum / m.runs : 0,
   })).sort((a, b) => b.runs - a.runs);
+
+  // 每关 × 平台:关联 level_attempt 与 run 取平台,按 (平台,关) 统计 run 级通关率
+  const { results: paRows } = await DB.prepare(`
+    SELECT la.level_index AS level_index, la.outcome AS outcome, la.run_id AS run_id, r.user_agent AS user_agent
+    FROM level_attempt la JOIN run r ON r.run_id = la.run_id
+    ${aClause}
+  `).bind(...aP).all();
+  const plLevel = {}; // platform -> level_index -> { att:Set, won:Set }
+  paRows.forEach((r) => {
+    const p = classifyPlatform(r.user_agent);
+    const byLv = plLevel[p] || (plLevel[p] = {});
+    const cell = byLv[r.level_index] || (byLv[r.level_index] = { att: new Set(), won: new Set() });
+    cell.att.add(r.run_id);
+    if (r.outcome === 'win') cell.won.add(r.run_id);
+  });
+
   const clearedRow = await DB.prepare(`
     SELECT COUNT(*) c FROM run ${rClause ? rClause + ' AND' : 'WHERE'} ended_reason='cleared'
   `).bind(...rP).first();
@@ -128,6 +144,21 @@ export async function computeStats(DB, range = {}) {
     DEFAULT_LEVELS.length,
     rows.length ? Math.max(...rows.map((r) => r.level_index)) + 1 : 0
   );
+
+  // 组装每平台的逐关通关率(run 级:该平台到达该关的 run 中通过的比例)
+  const platformLevels = platforms.map((pf) => {
+    const byLv = plLevel[pf.platform] || {};
+    const lv = [];
+    for (let i = 0; i < levelCount; i++) {
+      const c = byLv[i];
+      lv.push({
+        level_index: i,
+        attempts: c ? c.att.size : 0,
+        pass_rate: c && c.att.size ? c.won.size / c.att.size : null,
+      });
+    }
+    return { platform: pf.platform, levels: lv };
+  });
 
   const levels = [];
   for (let i = 0; i < levelCount; i++) {
@@ -165,6 +196,7 @@ export async function computeStats(DB, range = {}) {
       total_attempts: rows.reduce((s, r) => s + (r.attempts_total || 0), 0),
     },
     platforms,
+    platformLevels,
     levels,
   };
 }
