@@ -28,6 +28,18 @@ function cookieOptionsFor(req) {
 // 当前登录状态(页面用来决定显示登录框还是看板)
 router.get('/me', (req, res) => res.json({ authed: isAuthed(req) }));
 
+// 诊断:后端识别到的客户端 IP 与相关转发头(排查 IP/UV 是否取到真实 IP)
+router.get('/whoami', requireAuth, (req, res) => {
+  res.json({
+    reqIp: req.ip,                 // Express 按 trust proxy 解析出的 IP(埋点用的就是它)
+    reqIps: req.ips,               // trust proxy 解析出的完整链
+    xForwardedFor: req.headers['x-forwarded-for'] || null,
+    xRealIp: req.headers['x-real-ip'] || null,
+    remoteAddress: req.socket && req.socket.remoteAddress,
+    trustProxy: req.app.get('trust proxy'),
+  });
+});
+
 // 登录:校验单口令 → 下发 HttpOnly Cookie
 router.post('/login', (req, res) => {
   const pw = req.body && req.body.password;
