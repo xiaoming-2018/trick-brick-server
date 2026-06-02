@@ -193,6 +193,8 @@
     makeBar('ch-diff', labels, s.levels.map(function (l) { return l.difficulty; }),
       s.levels.map(function (l) { return diffColor(l.difficulty); }), { label: '难度分', max: 100 });
 
+    renderPlatforms(s.platforms);
+
     // 明细表
     var body = $('stats-body'); body.innerHTML = '';
     s.levels.forEach(function (l) {
@@ -213,6 +215,29 @@
 
   function box(v, label) {
     return '<div class="stat-box"><div class="v">' + (v || 0) + '</div><div class="l">' + label + '</div></div>';
+  }
+
+  // 平台分布与表现
+  function renderPlatforms(platforms) {
+    platforms = platforms || [];
+    var labels = platforms.map(function (p) { return p.platform; });
+    makeBar('ch-platform', labels, platforms.map(function (p) { return p.runs; }), '#8b5cf6', { label: '游玩次数' });
+    var body = $('platform-body'); body.innerHTML = '';
+    if (!platforms.length) {
+      body.innerHTML = '<tr><td colspan="6" class="desc" style="text-align:center;padding:16px;">暂无数据</td></tr>';
+      return;
+    }
+    platforms.forEach(function (p) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + p.platform + '</td>' +
+        '<td>' + p.runs + '</td>' +
+        '<td>' + p.unique_visitors + '</td>' +
+        '<td>' + p.cleared + '</td>' +
+        '<td>' + pct(p.cleared_rate) + '</td>' +
+        '<td>' + (p.avg_max_level == null ? '—' : p.avg_max_level.toFixed(1) + ' 关') + '</td>';
+      body.appendChild(tr);
+    });
   }
 
   $('apply').onclick = loadStats;

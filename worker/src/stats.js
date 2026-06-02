@@ -13,6 +13,18 @@ async function levelNames(DB) {
   return map;
 }
 
+// 从 user_agent 归类平台(顺序有讲究:iPhone 的 UA 含 "Mac OS X")
+function classifyPlatform(ua) {
+  ua = ua || '';
+  if (/OpenHarmony|HarmonyOS|ArkWeb/i.test(ua)) return 'HarmonyOS';
+  if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS';
+  if (/Android/i.test(ua)) return 'Android';
+  if (/Windows/i.test(ua)) return 'Windows';
+  if (/Macintosh|Mac OS X/i.test(ua)) return 'macOS';
+  if (/Linux/i.test(ua)) return 'Linux';
+  return '其他';
+}
+
 // 难度分(0~100,越高越难):综合通关率/重试/时间紧张/流失
 function difficultyScore(m) {
   const passRate = m.runs_attempted ? m.runs_won / m.runs_attempted : 0;
@@ -80,16 +92,33 @@ export async function computeStats(DB, range = {}) {
 
   // 漏斗:到达人数(run.max_level_reached >= level) 与 通过人数(该关有 win 的 run)
   const { results: reachedRows } = await DB.prepare(`
-    SELECT max_level_reached, ip_hash, user_agent, visitor_id FROM run ${rClause}
+    SELECT max_level_reached, ip_hash, user_agent, visitor_id, ended_reason FROM run ${rClause}
   `).bind(...rP).all();
 
+  const visitorKey = (x) => x.visitor_id || (x.ip_hash ? x.ip_hash + '|' + (x.user_agent || '') : null);
+
   const totalRuns = reachedRows.length;
-  // 独立访客:优先按 visitor_id(每浏览器唯一)去重;老数据无 visitor_id 时回退 ip+UA
-  const uniqueVisitors = new Set(
-    reachedRows
-      .map((x) => x.visitor_id || (x.ip_hash ? x.ip_hash + '|' + (x.user_agent || '') : null))
-      .filter(Boolean)
-  ).size;
+  const uniqueVisitors = new Set(reachedRows.map(visitorKey).filter(Boolean)).size;
+
+  // 平台维度:按操作系统/设备聚合游玩量、独立访客、通关表现
+  const platMap = {};
+  reachedRows.forEach((r) => {
+    const p = classifyPlatform(r.user_agent);
+    const m = platMap[p] || (platMap[p] = { platform: p, runs: 0, cleared: 0, reachedSum: 0, visitors: new Set() });
+    m.runs += 1;
+    if (r.ended_reason === 'cleared') m.cleared += 1;
+    m.reachedSum += r.max_level_reached || 0;
+    const k = visitorKey(r);
+    if (k) m.visitors.add(k);
+  });
+  const platforms = Object.values(platMap).map((m) => ({
+    platform: m.platform,
+    runs: m.runs,
+    unique_visitors: m.visitors.size,
+    cleared: m.cleared,
+    cleared_rate: m.runs ? m.cleared / m.runs : 0,
+    avg_max_level: m.runs ? m.reachedSum / m.runs : 0,
+  })).sort((a, b) => b.runs - a.runs);
   const clearedRow = await DB.prepare(`
     SELECT COUNT(*) c FROM run ${rClause ? rClause + ' AND' : 'WHERE'} ended_reason='cleared'
   `).bind(...rP).first();
@@ -135,6 +164,7 @@ export async function computeStats(DB, range = {}) {
       cleared_runs: clearedRuns,
       total_attempts: rows.reduce((s, r) => s + (r.attempts_total || 0), 0),
     },
+    platforms,
     levels,
   };
 }
