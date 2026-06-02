@@ -263,6 +263,7 @@
         label: pl.platform,
         data: pl.levels.map(function (x) { return x.pass_rate == null ? null : Math.round(x.pass_rate * 100); }),
         borderColor: c, backgroundColor: c, spanGaps: true, tension: 0.25, borderWidth: 2,
+        clip: false, // 不按图表区裁剪,避免 100% 的点/线被上沿切掉
       };
     });
     if (charts['ch-platform-levels']) charts['ch-platform-levels'].destroy();
@@ -271,7 +272,33 @@
       data: { labels: labels, datasets: datasets },
       options: {
         responsive: true,
-        plugins: { legend: { display: true } },
+        layout: { padding: { top: 12 } }, // 顶部留白,100% 线不贴边
+        plugins: {
+          legend: {
+            display: true,
+            // 点击图例:切换显隐,且图例标记+文字"点灭"(变灰),不打删除线
+            onClick: function (e, legendItem, legend) {
+              var ci = legend.chart, idx = legendItem.datasetIndex;
+              if (ci.isDatasetVisible(idx)) ci.hide(idx); else ci.show(idx);
+            },
+            labels: {
+              generateLabels: function (chart) {
+                return chart.data.datasets.map(function (ds, i) {
+                  var vis = chart.isDatasetVisible(i);
+                  return {
+                    text: ds.label,
+                    datasetIndex: i,
+                    hidden: false,              // 关键:始终 false,Chart.js 才不画删除线
+                    fillStyle: vis ? ds.borderColor : '#cbd0d6',
+                    strokeStyle: vis ? ds.borderColor : '#cbd0d6',
+                    fontColor: vis ? '#444' : '#bbb',
+                    lineWidth: 2,
+                  };
+                });
+              },
+            },
+          },
+        },
         scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: '通关率%' } } },
       },
     });
