@@ -118,8 +118,8 @@
     </header>
     <main>
       <nav class="tabs">
-        <button class="tab active" data-tab="levels">⏱ 过关时长管理</button>
-        <button class="tab" data-tab="dashboard">📊 数据看板</button>
+        <button class="tab active" data-tab="dashboard">📊 数据看板</button>
+        <button class="tab" data-tab="levels">⏱ 过关时长管理</button>
       </nav>
 
       <!-- Tab 1: 过关时长管理 -->
@@ -149,6 +149,7 @@
           <div class="filter-bar" style="display:flex;align-items:center;gap:8px;font-size:13px;">
             <label>起 <input type="date" id="from"></label>
             <label>止 <input type="date" id="to"></label>
+            <button class="btn btn-save" id="refresh">🔄 刷新数据</button>
             <button class="btn btn-save" id="apply">应用</button>
             <button class="btn btn-reset" id="clear-range">全部</button>
             <button class="btn btn-danger" id="clear-data">🗑 清除历史数据</button>

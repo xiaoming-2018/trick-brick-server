@@ -21,7 +21,7 @@
   function showApp(authed) {
     $('login').classList.toggle('hidden', authed);
     $('app').classList.toggle('hidden', !authed);
-    if (authed) switchTab('levels');   // 默认进"过关时长"tab
+    if (authed) switchTab('dashboard');   // 默认进"数据看板"tab
   }
 
   // ---------- 选项卡 ----------
@@ -304,6 +304,7 @@
     });
   }
 
+  $('refresh').onclick = function () { loadStats(); toast('已刷新数据'); };
   $('apply').onclick = loadStats;
   $('clear-range').onclick = function () { $('from').value = ''; $('to').value = ''; loadStats(); };
 
