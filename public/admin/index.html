@@ -83,8 +83,10 @@
     .table-wrap table { min-width:540px; }   /* 触发横向滚动而非压扁 */
     .stat-box { min-width:calc(50% - 7px); }  /* 概览每行两个 */
     .stat-box .v { font-size:20px; }
-    .filter-bar { width:100%; flex-wrap:wrap; }
-    .filter-bar .btn { flex:1; }
+    /* 数据看板工具栏:手机端去掉时间筛选(起/止/应用/全部),仅留刷新+清除,两按钮等宽铺满一行 */
+    .filter-bar { width:100%; flex-wrap:wrap; gap:10px; }
+    .filter-bar label, #apply, #clear-range { display:none !important; }
+    .filter-bar .btn { flex:1; min-width:0; padding:12px 8px; font-size:14px; border-radius:10px; }
     .modal-card { max-height:90vh; }
   }
   /* 使用帮助弹窗 */
